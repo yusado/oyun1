@@ -18,6 +18,10 @@ interface GamePopupProps {
   bestScore?: number;
   bestLevel?: number;
   streak?: number;
+  modeName?: string;
+  coinsEarnedThisRun?: number;
+  totalCoins?: number;
+  isDaily?: boolean;
   onClose?: () => void;
   onRestart?: () => void;
   onMainMenu?: () => void;
@@ -35,6 +39,10 @@ export function GamePopup({
   bestScore,
   bestLevel,
   streak,
+  modeName,
+  coinsEarnedThisRun,
+  totalCoins,
+  isDaily,
   onClose,
   onRestart,
   onMainMenu,
@@ -97,7 +105,7 @@ export function GamePopup({
             <Animated.View style={[styles.pointsRow, { transform: [{ scale: pointsScaleAnim }] }]}>
               <Text style={styles.pointsScore}>+{points}</Text>
               {coins !== undefined && coins > 0 && (
-                <Text style={styles.pointsCoins}> 🪙+{coins}</Text>
+                <Text style={styles.pointsCoins}> +{coins} coin</Text>
               )}
             </Animated.View>
             <Text style={styles.totalScore}>Toplam Puan {formatNum(totalScore || 0)}</Text>
@@ -116,18 +124,24 @@ export function GamePopup({
               <Text style={styles.iconGameOver}>✗</Text>
             </View>
             <Text style={styles.title}>Hakların Bitti</Text>
-            <Text style={styles.message}>1. bölüme dönüyorsun.</Text>
+            {modeName && <Text style={styles.modeLabel}>{modeName}</Text>}
             <View style={styles.statsContainer}>
               <View style={styles.statRow}>
-                <Text style={styles.statLabel}>Son Bölüm</Text>
+                <Text style={styles.statLabel}>Ulaşılan Bölüm</Text>
                 <Text style={styles.statValue}>{level || 1}</Text>
               </View>
               <View style={styles.statRow}>
                 <Text style={styles.statLabel}>Puan</Text>
                 <Text style={styles.statValue}>{formatNum(totalScore || 0)}</Text>
               </View>
+              {coinsEarnedThisRun !== undefined && coinsEarnedThisRun > 0 && (
+                <View style={styles.statRow}>
+                  <Text style={styles.statLabel}>Kazanılan Coin</Text>
+                  <Text style={styles.statValueGold}>{formatNum(coinsEarnedThisRun)}</Text>
+                </View>
+              )}
               <View style={styles.statRow}>
-                <Text style={styles.statLabel}>En Iyi Bölüm</Text>
+                <Text style={styles.statLabel}>En İyi Bölüm</Text>
                 <Text style={styles.statValueOrange}>{bestLevel || 1}</Text>
               </View>
               <View style={styles.statRow}>
@@ -150,15 +164,34 @@ export function GamePopup({
               <Text style={styles.trophyIcon}>🏆</Text>
             </View>
             <Text style={styles.title}>Tebrikler!</Text>
-            <Text style={styles.message}>Tüm bölümleri tamamladin!</Text>
+            <Text style={styles.message}>
+              {isDaily ? 'Bugünün meydan okumasını tamamladın.' : '100 bölümü tamamladın.'}
+            </Text>
+            {modeName && <Text style={styles.modeLabel}>{modeName}</Text>}
             <View style={styles.statsContainer}>
               <View style={styles.statRow}>
                 <Text style={styles.statLabel}>Final Puan</Text>
                 <Text style={styles.statValue}>{formatNum(totalScore || 0)}</Text>
               </View>
+              {coinsEarnedThisRun !== undefined && coinsEarnedThisRun > 0 && (
+                <View style={styles.statRow}>
+                  <Text style={styles.statLabel}>Kazanılan Coin</Text>
+                  <Text style={styles.statValueGold}>{formatNum(coinsEarnedThisRun)}</Text>
+                </View>
+              )}
+              {totalCoins !== undefined && (
+                <View style={styles.statRow}>
+                  <Text style={styles.statLabel}>Toplam Coin</Text>
+                  <Text style={styles.statValueGold}>{formatNum(totalCoins)}</Text>
+                </View>
+              )}
               <View style={styles.statRow}>
                 <Text style={styles.statLabel}>En Yüksek Puan</Text>
                 <Text style={styles.statValueOrange}>{formatNum(bestScore || 0)}</Text>
+              </View>
+              <View style={styles.statRow}>
+                <Text style={styles.statLabel}>En İyi Bölüm</Text>
+                <Text style={styles.statValueOrange}>{bestLevel || modeName}</Text>
               </View>
             </View>
             <View style={styles.buttonRow}>
@@ -257,6 +290,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     textAlign: 'center',
   },
+  modeLabel: {
+    fontSize: 14,
+    color: '#888',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
   message: {
     fontSize: 16,
     color: '#888',
@@ -317,6 +356,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#FF6B00',
+  },
+  statValueGold: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FFD700',
   },
   buttonWrapper: {
     width: '100%',

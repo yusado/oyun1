@@ -81,7 +81,7 @@ export default function AchievementsScreen() {
               </View>
               {isUnlocked && (
                 <View style={styles.unlockedBadge}>
-                  <Text style={styles.unlockedBadgeText}>ACILDI</Text>
+                  <Text style={styles.unlockedBadgeText}>AÇILDI</Text>
                 </View>
               )}
             </View>

@@ -19,6 +19,8 @@ export default function StatsScreen() {
   const router = useRouter();
   const [stats, setStats] = useState<GameStatistics | null>(null);
   const [coins, setCoins] = useState(0);
+  const [dailyBestScore, setDailyBestScore] = useState(0);
+  const [dailyBestLevel, setDailyBestLevel] = useState(0);
 
   useEffect(() => {
     loadData();
@@ -27,8 +29,13 @@ export default function StatsScreen() {
   const loadData = async () => {
     const statistics = await storage.getStatistics();
     const coinTotal = await storage.getCoins();
+    const dScore = await storage.getDailyBestScore();
+    const dLevel = await storage.getDailyBestLevel();
+
     setStats(statistics);
     setCoins(coinTotal);
+    setDailyBestScore(dScore);
+    setDailyBestLevel(dLevel);
   };
 
   if (!stats) {
@@ -82,7 +89,7 @@ export default function StatsScreen() {
             <StatRow label="En Yüksek Puan" value={stats.classicBestScore.toLocaleString('tr-TR')} highlight />
             <StatRow label="10. Bölüme Ulaşma" value={stats.reachedLevel10} />
             <StatRow label="50. Bölüme Ulaşma" value={stats.reachedLevel50} />
-            <StatRow label="100. Bölümü Tamamlama" value={stats.completedLevel100} />
+            <StatRow label="100. Bölümü Tamamlama" value={stats.classicCompletedLevel100} />
           </View>
         </View>
 
@@ -92,6 +99,7 @@ export default function StatsScreen() {
           <View style={styles.statsBox}>
             <StatRow label="En Yüksek Bölüm" value={stats.riskHighestLevel} highlight />
             <StatRow label="En Yüksek Puan" value={stats.riskBestScore.toLocaleString('tr-TR')} highlight />
+            <StatRow label="100. Bölümü Tamamlama" value={stats.riskCompletedLevel100} />
           </View>
         </View>
 
@@ -99,7 +107,8 @@ export default function StatsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Günlük Meydan Okuma</Text>
           <View style={styles.statsBox}>
-            <StatRow label="En Yüksek Puan" value={stats.dailyBestScore.toLocaleString('tr-TR')} highlight />
+            <StatRow label="Bugünün En Yüksek Puanı" value={dailyBestScore.toLocaleString('tr-TR')} highlight />
+            <StatRow label="Bugünün En Yüksek Bölümü" value={dailyBestLevel} highlight />
             <StatRow label="Oynanan Gün" value={stats.dailyChallengesPlayed} />
             <StatRow label="Tamamlanan" value={stats.dailyChallengesCompleted} />
           </View>

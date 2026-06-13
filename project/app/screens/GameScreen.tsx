@@ -74,6 +74,8 @@ export default function GameScreen() {
   const levelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const popupClosedRef = useRef(false);
   const runCountedRef = useRef(false);
+  const reached10CountedRef = useRef(false);
+  const reached50CountedRef = useRef(false);
 
   const modeConfig = getModeConfig(mode);
 
@@ -99,9 +101,9 @@ export default function GameScreen() {
       setBestLevel(stats.riskHighestLevel);
     } else if (mode === 'daily') {
       const dailyScore = await storage.getDailyBestScore();
-      const dailyHighLevel = stats.dailyHighestLevel || 0;
+      const dailyLevel = await storage.getDailyBestLevel();
       setBestScore(dailyScore);
-      setBestLevel(dailyHighLevel);
+      setBestLevel(dailyLevel);
     }
 
     setTotalCoins(coinTotal);
@@ -109,6 +111,8 @@ export default function GameScreen() {
     setSoundEnabled(sound);
     setSelectedBorderStyle(cosmetic.borderStyle);
     runCountedRef.current = false;
+    reached10CountedRef.current = false;
+    reached50CountedRef.current = false;
 
     startLevel(1);
   };
@@ -132,6 +136,30 @@ export default function GameScreen() {
     setTotalAttemptsForLevel(attemptsForLevel);
     setPhase('playing');
     isProcessingRef.current = false;
+
+    // Check reached-level milestones for Classic mode
+    if (mode === 'classic') {
+      if (levelNum >= 10 && !reached10CountedRef.current) {
+        reached10CountedRef.current = true;
+        incrementReachedLevel10();
+      }
+      if (levelNum >= 50 && !reached50CountedRef.current) {
+        reached50CountedRef.current = true;
+        incrementReachedLevel50();
+      }
+    }
+  };
+
+  const incrementReachedLevel10 = async () => {
+    const stats = await storage.getStatistics();
+    stats.reachedLevel10 += 1;
+    await storage.setStatistics(stats);
+  };
+
+  const incrementReachedLevel50 = async () => {
+    const stats = await storage.getStatistics();
+    stats.reachedLevel50 += 1;
+    await storage.setStatistics(stats);
   };
 
   const handleSquarePress = useCallback((index: number) => {
@@ -240,15 +268,12 @@ export default function GameScreen() {
     // Save best
     await saveBest(score, level - 1);
 
-    // Update mode-specific stats on game over
+    // Update mode-specific stats
     const stats = await storage.getStatistics();
-    if (mode === 'classic' && level >= 10) {
-      stats.reachedLevel10 += 1;
-    }
     if (mode === 'daily') {
       stats.dailyChallengesPlayed += 1;
+      await storage.setStatistics(stats);
     }
-    await storage.setStatistics(stats);
 
     await checkAndUnlockAchievements();
   };
@@ -266,7 +291,7 @@ export default function GameScreen() {
     }
     const totalCoinsEarned = finalCoins + victoryBonusCoins;
 
-    // Add victory bonus to permanent storage
+    // Add victory bonus to permanent storage (level coins already saved)
     const newTotalCoins = await storage.addCoins(victoryBonusCoins);
     setTotalCoins(newTotalCoins);
     setCoinsEarnedThisRun(totalCoinsEarned);
@@ -286,10 +311,10 @@ export default function GameScreen() {
     const stats = await storage.getStatistics();
     if (mode === 'classic') {
       stats.classicCompleted = true;
-      stats.completedLevel100 += 1;
+      stats.classicCompletedLevel100 += 1;
     } else if (mode === 'risk') {
       stats.riskCompleted = true;
-      stats.completedLevel100 += 1;
+      stats.riskCompletedLevel100 += 1;
     } else if (mode === 'daily') {
       stats.dailyChallengesCompleted += 1;
       await storage.setDailyCompleted(true);
@@ -333,9 +358,9 @@ export default function GameScreen() {
         setBestScore(currentScore);
         updated = true;
       }
-      const dailyHighLevel = stats.dailyHighestLevel || 0;
-      if (currentLevel > dailyHighLevel) {
-        stats.dailyHighestLevel = currentLevel;
+      const currentDailyLevel = await storage.getDailyBestLevel(dailyKey);
+      if (currentLevel > currentDailyLevel) {
+        await storage.setDailyBestLevel(currentLevel, dailyKey);
         setBestLevel(currentLevel);
         updated = true;
       }
@@ -374,7 +399,6 @@ export default function GameScreen() {
 
     for (const achievementId of newUnlocks) {
       await storage.unlockAchievement(achievementId);
-      // Show toast for first new achievement
       if (newUnlocks.indexOf(achievementId) === 0) {
         setAchievementToastId(achievementId);
         setAchievementToastVisible(true);
@@ -385,7 +409,6 @@ export default function GameScreen() {
   };
 
   const handlePopupClose = () => {
-    // Prevent double continuation: auto-close timer + button press
     if (popupClosedRef.current) return;
     popupClosedRef.current = true;
 
@@ -403,20 +426,18 @@ export default function GameScreen() {
     setCoinsEarnedThisRun(0);
     setWrongIndices([]);
     runCountedRef.current = false;
+    reached10CountedRef.current = false;
+    reached50CountedRef.current = false;
     if (levelTimerRef.current) clearTimeout(levelTimerRef.current);
     startLevel(1);
   };
 
-  const handleMainMenu = () => {
-    // Coins are already saved per-level, no need to add again
+  const handleMainMenu = async () => {
     // Count this as an abandoned run if not already counted and some progress was made
     if (level > 1 && !runCountedRef.current) {
-      storage.getStatistics().then((stats) => {
-        stats.totalGamesPlayed += 1;
-        storage.setStatistics(stats);
-      });
+      await countRunIfNeeded();
     }
-    router.back();
+    router.replace('/');
   };
 
   const handlePause = () => {
@@ -428,7 +449,6 @@ export default function GameScreen() {
   };
 
   const handleRestartRun = async () => {
-    // Count the abandoned run
     await countRunIfNeeded();
     setPhase('playing');
     setScore(0);
@@ -436,6 +456,8 @@ export default function GameScreen() {
     setCoinsEarnedThisRun(0);
     setWrongIndices([]);
     runCountedRef.current = false;
+    reached10CountedRef.current = false;
+    reached50CountedRef.current = false;
     startLevel(1);
   };
 
@@ -579,6 +601,10 @@ export default function GameScreen() {
         bestLevel={bestLevel}
         coins={popupCoins}
         streak={popupStreak}
+        modeName={modeConfig.name}
+        coinsEarnedThisRun={coinsEarnedThisRun}
+        totalCoins={totalCoins}
+        isDaily={mode === 'daily'}
         onClose={popupType === 'levelComplete' ? handlePopupClose : undefined}
         onRestart={handleRestart}
         onMainMenu={handleMainMenu}

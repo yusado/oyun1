@@ -13,7 +13,8 @@ export interface GameStatistics {
   dailyChallengesPlayed: number;
   reachedLevel10: number;
   reachedLevel50: number;
-  completedLevel100: number;
+  classicCompletedLevel100: number;
+  riskCompletedLevel100: number;
   classicCompleted: boolean;
   riskCompleted: boolean;
 }
@@ -33,7 +34,8 @@ export const DEFAULT_STATISTICS: GameStatistics = {
   dailyChallengesPlayed: 0,
   reachedLevel10: 0,
   reachedLevel50: 0,
-  completedLevel100: 0,
+  classicCompletedLevel100: 0,
+  riskCompletedLevel100: 0,
   classicCompleted: false,
   riskCompleted: false,
 };

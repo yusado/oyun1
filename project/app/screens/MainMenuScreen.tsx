@@ -8,7 +8,7 @@ import {
   Dimensions,
   SafeAreaView,
 } from 'react-native';
-import { Settings as SettingsIcon, ShoppingBag, Trophy, BarChart3 } from 'lucide-react-native';
+import { Settings as SettingsIcon, ShoppingBag, Trophy, ChartBar as BarChart3 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { storage } from '@/utils/storage';
 import { SettingsModal } from '@/components/SettingsModal';
@@ -80,7 +80,7 @@ export default function MainMenuScreen() {
         {/* Stats */}
         <View style={styles.statsSection}>
           <View style={styles.statCard}>
-            <Text style={styles.statLabel}>EN IYI BÖLÜM</Text>
+            <Text style={styles.statLabel}>EN İYİ BÖLÜM</Text>
             <Text style={styles.statValue}>{bestLevel || '-'}</Text>
           </View>
           <View style={styles.statCard}>

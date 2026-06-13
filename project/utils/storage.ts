@@ -196,4 +196,23 @@ export const storage = {
       console.error('Failed to save daily completion:', e);
     }
   },
+
+  async getDailyBestLevel(dateKey?: string): Promise<number> {
+    try {
+      const key = `daily_best_level_${dateKey || getDateKey()}`;
+      const value = await AsyncStorage.getItem(key);
+      return value ? parseInt(value, 10) : 0;
+    } catch {
+      return 0;
+    }
+  },
+
+  async setDailyBestLevel(level: number, dateKey?: string): Promise<void> {
+    try {
+      const key = `daily_best_level_${dateKey || getDateKey()}`;
+      await AsyncStorage.setItem(key, level.toString());
+    } catch (e) {
+      console.error('Failed to save daily best level:', e);
+    }
+  },
 };

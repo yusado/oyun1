@@ -35,6 +35,7 @@ export default function ModeSelectScreen() {
     const stats = await storage.getStatistics();
     const completed = await storage.isDailyCompleted();
     const dailyScore = await storage.getDailyBestScore();
+    const dailyLevel = await storage.getDailyBestLevel();
 
     setCoins(coinTotal);
     setClassicBestScore(stats.classicBestScore);
@@ -42,7 +43,7 @@ export default function ModeSelectScreen() {
     setRiskBestScore(stats.riskBestScore);
     setRiskBestLevel(stats.riskHighestLevel);
     setDailyBestScore(dailyScore);
-    setDailyBestLevel(stats.dailyHighestLevel || 0);
+    setDailyBestLevel(dailyLevel);
     setDailyCompleted(completed);
   };
 
