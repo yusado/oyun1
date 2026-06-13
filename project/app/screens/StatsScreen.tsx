@@ -109,7 +109,7 @@ export default function StatsScreen() {
           <View style={styles.statsBox}>
             <StatRow label="Bugünün En Yüksek Puanı" value={dailyBestScore.toLocaleString('tr-TR')} highlight />
             <StatRow label="Bugünün En Yüksek Bölümü" value={dailyBestLevel} highlight />
-            <StatRow label="Oynanan Gün" value={stats.dailyChallengesPlayed} />
+            <StatRow label="Günlük Oynama" value={stats.dailyChallengesPlayed} />
             <StatRow label="Tamamlanan" value={stats.dailyChallengesCompleted} />
           </View>
         </View>

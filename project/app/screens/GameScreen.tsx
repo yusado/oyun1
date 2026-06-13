@@ -76,6 +76,7 @@ export default function GameScreen() {
   const runCountedRef = useRef(false);
   const reached10CountedRef = useRef(false);
   const reached50CountedRef = useRef(false);
+  const dailyPlayedCountedRef = useRef(false);
 
   const modeConfig = getModeConfig(mode);
 
@@ -113,11 +114,12 @@ export default function GameScreen() {
     runCountedRef.current = false;
     reached10CountedRef.current = false;
     reached50CountedRef.current = false;
+    dailyPlayedCountedRef.current = false;
 
     startLevel(1);
   };
 
-  const startLevel = (levelNum: number) => {
+  const startLevel = async (levelNum: number) => {
     const config = generateLevel(levelNum);
     const attemptsForLevel = modeConfig.getAttempts(levelNum);
 
@@ -137,29 +139,47 @@ export default function GameScreen() {
     setPhase('playing');
     isProcessingRef.current = false;
 
-    // Check reached-level milestones for Classic mode
+    // Update highest reached level and reached-level counters in one write
+    const stats = await storage.getStatistics();
+    let statsChanged = false;
+
     if (mode === 'classic') {
+      if (levelNum > stats.classicHighestLevel) {
+        stats.classicHighestLevel = levelNum;
+        setBestLevel(levelNum);
+        statsChanged = true;
+      }
       if (levelNum >= 10 && !reached10CountedRef.current) {
         reached10CountedRef.current = true;
-        incrementReachedLevel10();
+        stats.reachedLevel10 += 1;
+        statsChanged = true;
       }
       if (levelNum >= 50 && !reached50CountedRef.current) {
         reached50CountedRef.current = true;
-        incrementReachedLevel50();
+        stats.reachedLevel50 += 1;
+        statsChanged = true;
+      }
+    } else if (mode === 'risk') {
+      if (levelNum > stats.riskHighestLevel) {
+        stats.riskHighestLevel = levelNum;
+        setBestLevel(levelNum);
+        statsChanged = true;
+      }
+    } else if (mode === 'daily') {
+      const dailyKey = getDateKey();
+      const currentDailyLevel = await storage.getDailyBestLevel(dailyKey);
+      if (levelNum > currentDailyLevel) {
+        await storage.setDailyBestLevel(levelNum, dailyKey);
+        setBestLevel(levelNum);
       }
     }
-  };
 
-  const incrementReachedLevel10 = async () => {
-    const stats = await storage.getStatistics();
-    stats.reachedLevel10 += 1;
-    await storage.setStatistics(stats);
-  };
+    if (statsChanged) {
+      await storage.setStatistics(stats);
+    }
 
-  const incrementReachedLevel50 = async () => {
-    const stats = await storage.getStatistics();
-    stats.reachedLevel50 += 1;
-    await storage.setStatistics(stats);
+    // Check achievements immediately after updating highest level
+    await checkAndUnlockAchievements();
   };
 
   const handleSquarePress = useCallback((index: number) => {
@@ -200,7 +220,7 @@ export default function GameScreen() {
     await updateTapStats(true);
 
     // Save best and check achievements immediately
-    await saveBest(currentScore, level);
+    await saveBest(currentScore);
     await checkAndUnlockAchievements();
 
     // Check for victory
@@ -266,11 +286,12 @@ export default function GameScreen() {
     await countRunIfNeeded();
 
     // Save best
-    await saveBest(score, level - 1);
+    await saveBest(score);
 
     // Update mode-specific stats
     const stats = await storage.getStatistics();
-    if (mode === 'daily') {
+    if (mode === 'daily' && !dailyPlayedCountedRef.current) {
+      dailyPlayedCountedRef.current = true;
       stats.dailyChallengesPlayed += 1;
       await storage.setStatistics(stats);
     }
@@ -305,7 +326,7 @@ export default function GameScreen() {
     await countRunIfNeeded();
 
     // Save best
-    await saveBest(finalScore, modeConfig.totalLevels);
+    await saveBest(finalScore);
 
     // Update victory stats
     const stats = await storage.getStatistics();
@@ -316,6 +337,10 @@ export default function GameScreen() {
       stats.riskCompleted = true;
       stats.riskCompletedLevel100 += 1;
     } else if (mode === 'daily') {
+      if (!dailyPlayedCountedRef.current) {
+        dailyPlayedCountedRef.current = true;
+        stats.dailyChallengesPlayed += 1;
+      }
       stats.dailyChallengesCompleted += 1;
       await storage.setDailyCompleted(true);
     }
@@ -324,7 +349,7 @@ export default function GameScreen() {
     await checkAndUnlockAchievements();
   };
 
-  const saveBest = async (currentScore: number, currentLevel: number) => {
+  const saveBest = async (currentScore: number) => {
     const stats = await storage.getStatistics();
     let updated = false;
 
@@ -334,20 +359,10 @@ export default function GameScreen() {
         setBestScore(currentScore);
         updated = true;
       }
-      if (currentLevel > stats.classicHighestLevel) {
-        stats.classicHighestLevel = currentLevel;
-        setBestLevel(currentLevel);
-        updated = true;
-      }
     } else if (mode === 'risk') {
       if (currentScore > stats.riskBestScore) {
         stats.riskBestScore = currentScore;
         setBestScore(currentScore);
-        updated = true;
-      }
-      if (currentLevel > stats.riskHighestLevel) {
-        stats.riskHighestLevel = currentLevel;
-        setBestLevel(currentLevel);
         updated = true;
       }
     } else if (mode === 'daily') {
@@ -356,12 +371,6 @@ export default function GameScreen() {
       if (currentScore > currentDaily) {
         await storage.setDailyBestScore(currentScore, dailyKey);
         setBestScore(currentScore);
-        updated = true;
-      }
-      const currentDailyLevel = await storage.getDailyBestLevel(dailyKey);
-      if (currentLevel > currentDailyLevel) {
-        await storage.setDailyBestLevel(currentLevel, dailyKey);
-        setBestLevel(currentLevel);
         updated = true;
       }
     }
@@ -428,6 +437,7 @@ export default function GameScreen() {
     runCountedRef.current = false;
     reached10CountedRef.current = false;
     reached50CountedRef.current = false;
+    dailyPlayedCountedRef.current = false;
     if (levelTimerRef.current) clearTimeout(levelTimerRef.current);
     startLevel(1);
   };
@@ -458,6 +468,7 @@ export default function GameScreen() {
     runCountedRef.current = false;
     reached10CountedRef.current = false;
     reached50CountedRef.current = false;
+    dailyPlayedCountedRef.current = false;
     startLevel(1);
   };
 
@@ -605,6 +616,7 @@ export default function GameScreen() {
         coinsEarnedThisRun={coinsEarnedThisRun}
         totalCoins={totalCoins}
         isDaily={mode === 'daily'}
+        totalLevels={modeConfig.totalLevels}
         onClose={popupType === 'levelComplete' ? handlePopupClose : undefined}
         onRestart={handleRestart}
         onMainMenu={handleMainMenu}

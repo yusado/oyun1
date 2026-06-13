@@ -22,6 +22,7 @@ interface GamePopupProps {
   coinsEarnedThisRun?: number;
   totalCoins?: number;
   isDaily?: boolean;
+  totalLevels?: number;
   onClose?: () => void;
   onRestart?: () => void;
   onMainMenu?: () => void;
@@ -43,6 +44,7 @@ export function GamePopup({
   coinsEarnedThisRun,
   totalCoins,
   isDaily,
+  totalLevels,
   onClose,
   onRestart,
   onMainMenu,
@@ -191,7 +193,7 @@ export function GamePopup({
               </View>
               <View style={styles.statRow}>
                 <Text style={styles.statLabel}>En İyi Bölüm</Text>
-                <Text style={styles.statValueOrange}>{bestLevel || modeName}</Text>
+                <Text style={styles.statValueOrange}>{bestLevel ?? totalLevels ?? 0}</Text>
               </View>
             </View>
             <View style={styles.buttonRow}>
