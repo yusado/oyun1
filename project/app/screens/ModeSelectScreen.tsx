@@ -42,7 +42,7 @@ export default function ModeSelectScreen() {
     setRiskBestScore(stats.riskBestScore);
     setRiskBestLevel(stats.riskHighestLevel);
     setDailyBestScore(dailyScore);
-    setDailyBestLevel(dailyScore > 0 ? 20 : 0);
+    setDailyBestLevel(stats.dailyHighestLevel || 0);
     setDailyCompleted(completed);
   };
 

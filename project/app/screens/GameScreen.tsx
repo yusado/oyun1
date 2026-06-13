@@ -4,27 +4,26 @@ import {
   Text,
   StyleSheet,
   StatusBar,
-  Platform,
   Dimensions,
   SafeAreaView,
   TouchableOpacity,
   Modal,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Pause, Volume2, VolumeX, RefreshCw, Home, Play } from 'lucide-react-native';
+import { Pause, Volume2, VolumeX, RefreshCw, Hop as Home, Play } from 'lucide-react-native';
 import { SquareGrid } from '@/components/SquareGrid';
 import { GamePopup } from '@/components/GamePopup';
 import { AchievementToast } from '@/components/AchievementToast';
 import { CoinDisplay } from '@/components/CoinDisplay';
 import { generateLevel, generateCorrectSquareIndex, LevelConfig } from '@/game/levelGenerator';
 import { calculateScore, calculateCoins, formatScore } from '@/game/scoring';
-import { GameMode, GAME_MODES, getModeConfig } from '@/game/modes';
+import { GameMode, getModeConfig } from '@/game/modes';
 import { getDailyCorrectIndex, getDateKey } from '@/game/dailyChallenge';
+import { getCosmeticById, BorderStyle } from '@/game/cosmetics';
 import { storage } from '@/utils/storage';
 import { soundManager } from '@/utils/sound';
 import { triggerHaptic } from '@/utils/haptics';
-import { GameStatistics } from '@/game/statistics';
-import { checkAchievements, getAchievementById } from '@/game/achievements';
+import { checkAchievements } from '@/game/achievements';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -39,12 +38,18 @@ export default function GameScreen() {
   const [level, setLevel] = useState(1);
   const [score, setScore] = useState(0);
   const [streak, setStreak] = useState(0);
-  const [coinsEarned, setCoinsEarned] = useState(0);
+  const [coinsEarnedThisRun, setCoinsEarnedThisRun] = useState(0);
   const [levelConfig, setLevelConfig] = useState<LevelConfig | null>(null);
   const [correctIndex, setCorrectIndex] = useState(0);
   const [wrongIndices, setWrongIndices] = useState<number[]>([]);
   const [attempts, setAttempts] = useState(1);
+  const [totalAttemptsForLevel, setTotalAttemptsForLevel] = useState(1);
   const [phase, setPhase] = useState<GamePhase>('playing');
+
+  // Cosmetic
+  const [selectedBorderStyle, setSelectedBorderStyle] = useState<BorderStyle>(
+    getCosmeticById('default').borderStyle
+  );
 
   // Popup state
   const [popupType, setPopupType] = useState<'levelComplete' | 'gameOver' | 'victory'>('levelComplete');
@@ -52,6 +57,7 @@ export default function GameScreen() {
   const [popupPoints, setPopupPoints] = useState(0);
   const [popupCoins, setPopupCoins] = useState(0);
   const [popupTotalScore, setPopupTotalScore] = useState(0);
+  const [popupStreak, setPopupStreak] = useState(0);
 
   // Persistent data
   const [bestScore, setBestScore] = useState(0);
@@ -63,9 +69,11 @@ export default function GameScreen() {
   const [achievementToastVisible, setAchievementToastVisible] = useState(false);
   const [achievementToastId, setAchievementToastId] = useState('');
 
+  // Refs
   const isProcessingRef = useRef(false);
-  const levelTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const gameStartTimeRef = useRef(Date.now());
+  const levelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const popupClosedRef = useRef(false);
+  const runCountedRef = useRef(false);
 
   const modeConfig = getModeConfig(mode);
 
@@ -80,6 +88,8 @@ export default function GameScreen() {
     const stats = await storage.getStatistics();
     const coinTotal = await storage.getCoins();
     const sound = await storage.isSoundEnabled();
+    const selectedCosmeticId = await storage.getSelectedCosmetic();
+    const cosmetic = getCosmeticById(selectedCosmeticId);
 
     if (mode === 'classic') {
       setBestScore(stats.classicBestScore);
@@ -89,13 +99,16 @@ export default function GameScreen() {
       setBestLevel(stats.riskHighestLevel);
     } else if (mode === 'daily') {
       const dailyScore = await storage.getDailyBestScore();
+      const dailyHighLevel = stats.dailyHighestLevel || 0;
       setBestScore(dailyScore);
-      setBestLevel(dailyScore > 0 ? 20 : 0);
+      setBestLevel(dailyHighLevel);
     }
 
     setTotalCoins(coinTotal);
     soundManager.setEnabled(sound);
     setSoundEnabled(sound);
+    setSelectedBorderStyle(cosmetic.borderStyle);
+    runCountedRef.current = false;
 
     startLevel(1);
   };
@@ -116,6 +129,7 @@ export default function GameScreen() {
     setCorrectIndex(correct);
     setWrongIndices([]);
     setAttempts(attemptsForLevel);
+    setTotalAttemptsForLevel(attemptsForLevel);
     setPhase('playing');
     isProcessingRef.current = false;
   };
@@ -126,9 +140,6 @@ export default function GameScreen() {
 
     isProcessingRef.current = true;
 
-    // Update tap stats
-    updateTapStats(false);
-
     if (index === correctIndex) {
       handleCorrectAnswer();
     } else {
@@ -136,7 +147,7 @@ export default function GameScreen() {
     }
   }, [phase, correctIndex, wrongIndices, level]);
 
-  const handleCorrectAnswer = () => {
+  const handleCorrectAnswer = async () => {
     triggerHaptic('success');
     soundManager.playCorrect();
 
@@ -147,14 +158,22 @@ export default function GameScreen() {
     const coins = calculateCoins(level, coinMultiplier, false);
 
     const currentScore = score + points;
-    const newCoinsEarned = coinsEarned + coins;
+    const newCoinsEarned = coinsEarnedThisRun + coins;
 
     setScore(currentScore);
     setStreak(newStreak);
-    setCoinsEarned(newCoinsEarned);
+    setCoinsEarnedThisRun(newCoinsEarned);
 
-    // Update correct tap stats
-    updateTapStats(true);
+    // Save coins immediately to permanent storage
+    const newTotalCoins = await storage.addCoins(coins);
+    setTotalCoins(newTotalCoins);
+
+    // Update tap stats: correct tap
+    await updateTapStats(true);
+
+    // Save best and check achievements immediately
+    await saveBest(currentScore, level);
+    await checkAndUnlockAchievements();
 
     // Check for victory
     if (level >= modeConfig.totalLevels) {
@@ -165,17 +184,19 @@ export default function GameScreen() {
     setPopupPoints(points);
     setPopupCoins(coins);
     setPopupTotalScore(currentScore);
+    setPopupStreak(newStreak);
     setPopupType('levelComplete');
     setPopupVisible(true);
+    popupClosedRef.current = false;
     setPhase('levelComplete');
-
-    // Update best score/level if needed
-    saveBest(currentScore, level);
   };
 
-  const handleWrongAnswer = (index: number) => {
+  const handleWrongAnswer = async (index: number) => {
     triggerHaptic('error');
     soundManager.playWrong();
+
+    // Update tap stats: wrong tap
+    await updateTapStats(false);
 
     const newWrongIndices = [...wrongIndices, index];
     setWrongIndices(newWrongIndices);
@@ -183,12 +204,24 @@ export default function GameScreen() {
     const newAttempts = attempts - 1;
     setAttempts(newAttempts);
 
+    // Check achievements after tap stats update
+    await checkAndUnlockAchievements();
+
     if (newAttempts <= 0) {
       setTimeout(() => handleGameOver(), 450);
     } else {
       setTimeout(() => {
         isProcessingRef.current = false;
       }, 350);
+    }
+  };
+
+  const countRunIfNeeded = async () => {
+    if (!runCountedRef.current) {
+      runCountedRef.current = true;
+      const stats = await storage.getStatistics();
+      stats.totalGamesPlayed += 1;
+      await storage.setStatistics(stats);
     }
   };
 
@@ -201,36 +234,69 @@ export default function GameScreen() {
     setPopupVisible(true);
     setPhase('gameOver');
 
-    // Save best and stats
-    saveBest(score, level - 1);
-    await updateStatsOnGameOver();
+    // Count run
+    await countRunIfNeeded();
 
-    // Check achievements
-    checkAndUnlockAchievements();
+    // Save best
+    await saveBest(score, level - 1);
+
+    // Update mode-specific stats on game over
+    const stats = await storage.getStatistics();
+    if (mode === 'classic' && level >= 10) {
+      stats.reachedLevel10 += 1;
+    }
+    if (mode === 'daily') {
+      stats.dailyChallengesPlayed += 1;
+    }
+    await storage.setStatistics(stats);
+
+    await checkAndUnlockAchievements();
   };
 
   const handleVictory = async (finalScore: number, finalCoins: number) => {
     triggerHaptic('success');
     soundManager.playVictory();
 
-    // Add victory bonus coins
-    const victoryCoins = calculateCoins(100, modeConfig.getCoinMultiplier(), true);
-    const totalCoinsEarned = finalCoins + victoryCoins;
+    // Mode-aware victory bonus
+    let victoryBonusCoins: number;
+    if (mode === 'daily') {
+      victoryBonusCoins = 25;
+    } else {
+      victoryBonusCoins = calculateCoins(100, modeConfig.getCoinMultiplier(), true);
+    }
+    const totalCoinsEarned = finalCoins + victoryBonusCoins;
 
-    await storage.addCoins(totalCoinsEarned);
-    setCoinsEarned(totalCoinsEarned);
+    // Add victory bonus to permanent storage
+    const newTotalCoins = await storage.addCoins(victoryBonusCoins);
+    setTotalCoins(newTotalCoins);
+    setCoinsEarnedThisRun(totalCoinsEarned);
 
     setPopupTotalScore(finalScore);
     setPopupType('victory');
     setPopupVisible(true);
     setPhase('victory');
 
-    // Save best
-    saveBest(finalScore, modeConfig.totalLevels);
-    await updateStatsOnVictory();
+    // Count run
+    await countRunIfNeeded();
 
-    // Check achievements
-    checkAndUnlockAchievements();
+    // Save best
+    await saveBest(finalScore, modeConfig.totalLevels);
+
+    // Update victory stats
+    const stats = await storage.getStatistics();
+    if (mode === 'classic') {
+      stats.classicCompleted = true;
+      stats.completedLevel100 += 1;
+    } else if (mode === 'risk') {
+      stats.riskCompleted = true;
+      stats.completedLevel100 += 1;
+    } else if (mode === 'daily') {
+      stats.dailyChallengesCompleted += 1;
+      await storage.setDailyCompleted(true);
+    }
+    await storage.setStatistics(stats);
+
+    await checkAndUnlockAchievements();
   };
 
   const saveBest = async (currentScore: number, currentLevel: number) => {
@@ -265,6 +331,13 @@ export default function GameScreen() {
       if (currentScore > currentDaily) {
         await storage.setDailyBestScore(currentScore, dailyKey);
         setBestScore(currentScore);
+        updated = true;
+      }
+      const dailyHighLevel = stats.dailyHighestLevel || 0;
+      if (currentLevel > dailyHighLevel) {
+        stats.dailyHighestLevel = currentLevel;
+        setBestLevel(currentLevel);
+        updated = true;
       }
     }
 
@@ -281,41 +354,6 @@ export default function GameScreen() {
     } else {
       stats.totalWrongTaps += 1;
     }
-    await storage.setStatistics(stats);
-  };
-
-  const updateStatsOnGameOver = async () => {
-    const stats = await storage.getStatistics();
-    stats.totalGamesPlayed += 1;
-
-    if (mode === 'classic') {
-      if (level >= 10) stats.reachedLevel10 += 1;
-    }
-    if (mode === 'daily') {
-      stats.dailyChallengesPlayed += 1;
-    }
-
-    // Add coins earned so far
-    if (coinsEarned > 0) {
-      await storage.addCoins(coinsEarned);
-    }
-
-    await storage.setStatistics(stats);
-  };
-
-  const updateStatsOnVictory = async () => {
-    const stats = await storage.getStatistics();
-    stats.completedLevel100 += 1;
-
-    if (mode === 'classic') {
-      stats.classicCompleted = true;
-    } else if (mode === 'risk') {
-      stats.riskCompleted = true;
-    } else if (mode === 'daily') {
-      stats.dailyChallengesCompleted += 1;
-      await storage.setDailyCompleted(true);
-    }
-
     await storage.setStatistics(stats);
   };
 
@@ -336,7 +374,7 @@ export default function GameScreen() {
 
     for (const achievementId of newUnlocks) {
       await storage.unlockAchievement(achievementId);
-      // Show toast for first achievement
+      // Show toast for first new achievement
       if (newUnlocks.indexOf(achievementId) === 0) {
         setAchievementToastId(achievementId);
         setAchievementToastVisible(true);
@@ -347,6 +385,10 @@ export default function GameScreen() {
   };
 
   const handlePopupClose = () => {
+    // Prevent double continuation: auto-close timer + button press
+    if (popupClosedRef.current) return;
+    popupClosedRef.current = true;
+
     setPopupVisible(false);
     if (levelTimerRef.current) clearTimeout(levelTimerRef.current);
     levelTimerRef.current = setTimeout(() => {
@@ -358,15 +400,21 @@ export default function GameScreen() {
     setPopupVisible(false);
     setScore(0);
     setStreak(0);
-    setCoinsEarned(0);
+    setCoinsEarnedThisRun(0);
     setWrongIndices([]);
+    runCountedRef.current = false;
     if (levelTimerRef.current) clearTimeout(levelTimerRef.current);
     startLevel(1);
   };
 
   const handleMainMenu = () => {
-    if (coinsEarned > 0) {
-      storage.addCoins(coinsEarned);
+    // Coins are already saved per-level, no need to add again
+    // Count this as an abandoned run if not already counted and some progress was made
+    if (level > 1 && !runCountedRef.current) {
+      storage.getStatistics().then((stats) => {
+        stats.totalGamesPlayed += 1;
+        storage.setStatistics(stats);
+      });
     }
     router.back();
   };
@@ -379,12 +427,15 @@ export default function GameScreen() {
     setPhase('playing');
   };
 
-  const handleRestartRun = () => {
+  const handleRestartRun = async () => {
+    // Count the abandoned run
+    await countRunIfNeeded();
     setPhase('playing');
     setScore(0);
     setStreak(0);
-    setCoinsEarned(0);
+    setCoinsEarnedThisRun(0);
     setWrongIndices([]);
+    runCountedRef.current = false;
     startLevel(1);
   };
 
@@ -429,7 +480,7 @@ export default function GameScreen() {
         </View>
 
         <View style={styles.headerRight}>
-          <CoinDisplay coins={coinsEarned} size="small" />
+          <CoinDisplay coins={coinsEarnedThisRun} size="small" />
         </View>
       </View>
 
@@ -446,7 +497,7 @@ export default function GameScreen() {
             <Text style={styles.hudAttemptsValue}>
               <Text style={styles.attemptsCurrent}>{attempts}</Text>
               <Text style={styles.attemptsSeparator}>/</Text>
-              <Text style={styles.attemptsTotal}>{levelConfig.attempts}</Text>
+              <Text style={styles.attemptsTotal}>{totalAttemptsForLevel}</Text>
             </Text>
           </View>
 
@@ -480,6 +531,7 @@ export default function GameScreen() {
           wrongIndices={wrongIndices}
           onSquarePress={handleSquarePress}
           isInteractionEnabled={isInteractionEnabled}
+          borderStyle={selectedBorderStyle}
         />
       </View>
 
@@ -526,6 +578,7 @@ export default function GameScreen() {
         bestScore={bestScore}
         bestLevel={bestLevel}
         coins={popupCoins}
+        streak={popupStreak}
         onClose={popupType === 'levelComplete' ? handlePopupClose : undefined}
         onRestart={handleRestart}
         onMainMenu={handleMainMenu}

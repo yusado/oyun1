@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Animated,
 } from 'react-native';
+import { BorderStyle } from '@/game/cosmetics';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -15,6 +16,7 @@ interface SquareGridProps {
   wrongIndices: number[];
   onSquarePress: (index: number) => void;
   isInteractionEnabled: boolean;
+  borderStyle: BorderStyle;
 }
 
 export function SquareGrid({
@@ -23,10 +25,11 @@ export function SquareGrid({
   wrongIndices,
   onSquarePress,
   isInteractionEnabled,
+  borderStyle,
 }: SquareGridProps) {
   const gridPadding = 12;
   const gap = 6;
-  const availableWidth = SCREEN_WIDTH - gridPadding * 2 - 32; // 32 for outer margins
+  const availableWidth = SCREEN_WIDTH - gridPadding * 2 - 32;
   const availableHeight = SCREEN_HEIGHT * 0.55;
 
   const rows = Math.ceil(squaresCount / columns);
@@ -46,6 +49,7 @@ export function SquareGrid({
         isWrong={isWrong}
         onPress={() => onSquarePress(i)}
         disabled={!isInteractionEnabled || isWrong}
+        borderStyle={borderStyle}
       />
     );
   }
@@ -63,9 +67,10 @@ interface SquareProps {
   isWrong: boolean;
   onPress: () => void;
   disabled: boolean;
+  borderStyle: BorderStyle;
 }
 
-function Square({ size, isWrong, onPress, disabled }: SquareProps) {
+function Square({ size, isWrong, onPress, disabled, borderStyle }: SquareProps) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const shakeAnim = useRef(new Animated.Value(0)).current;
 
@@ -124,10 +129,18 @@ function Square({ size, isWrong, onPress, disabled }: SquareProps) {
     outputRange: [-4, 0, 4],
   });
 
+  // Apply cosmetic style to active squares; wrong squares stay dimmed
   const bgColor = isWrong ? '#080808' : '#1a1a1a';
-  const borderColor = isWrong ? '#333' : '#FF6B00';
+  const borderColor = isWrong ? '#333' : (borderStyle.borderColor || '#FF6B00');
   const opacity = isWrong ? 0.35 : 1;
   const innerBg = isWrong ? '#0a0a0a' : '#2a2a2a';
+  const squareBorderWidth = isWrong ? 2 : borderStyle.borderWidth;
+  const squareBorderRadius = isWrong ? 8 : borderStyle.borderRadius;
+  const squareBorderStyle = isWrong ? 'solid' : (borderStyle.borderStyle || 'solid');
+
+  // Glow effects for active squares
+  const glowColor = !isWrong && borderStyle.glowColor ? borderStyle.glowColor : undefined;
+  const glowRadius = !isWrong && borderStyle.glowRadius ? borderStyle.glowRadius : 0;
 
   return (
     <TouchableOpacity
@@ -146,11 +159,27 @@ function Square({ size, isWrong, onPress, disabled }: SquareProps) {
             height: size,
             backgroundColor: bgColor,
             borderColor: borderColor,
+            borderWidth: squareBorderWidth,
+            borderRadius: squareBorderRadius,
+            borderStyle: squareBorderStyle,
             opacity: opacity,
             transform: [
               { scale: scaleAnim },
               { translateX: shakeTranslate },
             ],
+            ...(glowColor ? {
+              shadowColor: glowColor,
+              shadowOffset: { width: 0, height: 0 },
+              shadowOpacity: 1,
+              shadowRadius: glowRadius,
+              elevation: 5,
+            } : {
+              shadowColor: '#FF6B00',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.08,
+              shadowRadius: 4,
+              elevation: 3,
+            }),
           },
         ]}
       >
@@ -161,6 +190,7 @@ function Square({ size, isWrong, onPress, disabled }: SquareProps) {
               width: size - 10,
               height: size - 10,
               backgroundColor: innerBg,
+              borderRadius: Math.max(0, squareBorderRadius - 4),
             },
           ]}
         />
@@ -184,17 +214,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   square: {
-    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    shadowColor: '#FF6B00',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 3,
   },
-  squareInner: {
-    borderRadius: 4,
-  },
+  squareInner: {},
 });

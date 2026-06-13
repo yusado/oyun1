@@ -8,6 +8,7 @@ export interface GameStatistics {
   classicBestScore: number;
   riskBestScore: number;
   dailyBestScore: number;
+  dailyHighestLevel: number;
   dailyChallengesCompleted: number;
   dailyChallengesPlayed: number;
   reachedLevel10: number;
@@ -27,6 +28,7 @@ export const DEFAULT_STATISTICS: GameStatistics = {
   classicBestScore: 0,
   riskBestScore: 0,
   dailyBestScore: 0,
+  dailyHighestLevel: 0,
   dailyChallengesCompleted: 0,
   dailyChallengesPlayed: 0,
   reachedLevel10: 0,
